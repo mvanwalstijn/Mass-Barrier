@@ -40,6 +40,7 @@ else
     rhat = r;
 end
 
+
 %% CAP KAPPA %%%%%%%%%%%%%%%%%
 vim = par.vim;   % expected max impact velocity
 zeta = (sqrt(pi)*gamma(1 + 1/(alp+1)))/(gamma(0.5 + 1/(alp+1)));
@@ -71,11 +72,11 @@ EPS = eps;
 EPS2 = eps^2;
 maxiter = 1000;
 TH = 100*eps;
+s = 0.000001*[1; 1];
 
 %% TIME-STEPPING LOOP %%%%%%%%%%%%%
 eta = 1;
 hm = eta;
-s = 0.000001*[1; 1];
 
 for n=1:Ns
     %required variables 
@@ -84,8 +85,7 @@ for n=1:Ns
     us = um - 2*z;
     vi = (us(1) - u(1))/dt;         % estimate velocity between n and n+1
     if us(1) > xb && u(1) <= xb      % when making contact, set eta
-        %eta = 8*(1-cr)/(5*(cr + chir*dt^2)*(vi + chiv*dt^2));  % adjusted Flores expression
-        eta = ((0.2*alp + 1.3)*(1-cr))/((cr + chir*dt^2)*(vi + chiv*dt^2));  % adjusted Sun et al expression
+        eta = ((0.2*alp + 1.3)*(1-cr))/((cr + chi*dt^2)*(vi + chi*dt^2));  % adjusted Sun et al expression
     end
     %x component
     wstar = 0.5*(u(1) + um(1)) - xb;               % past contact variable    
@@ -105,16 +105,15 @@ for n=1:Ns
         else
             h = eta;
         end
-        % dh = (0.5*bet^2*dt)/(dt^2 + (0.5*bet*sx)^2);
-        dh = (h-hm)/dt;     % Calculate dh numerically instead (using previous hm value)
-        
+        % dh = (0.5*bet^2*dt)/(dt^2 + (0.5*bet*sx)^2);      % analytic dh
+        dh = (h-hm)/dt;     % Calculate dh numerically instead 
+        hm = h;
         q =  C*(1 + (0.5*sx/dt)*h);
         dq = (0.5*C/dt)*(h + sx*dh);
-        Fx = 2*(((Phiph - Phimh)*sx)/(sx^2 + EPS2) + 0.5*dPhimh*(EPS2/(sx^2 + EPS2)));
-        dFx = 2*((0.5*dPhiph*sx - Phiph + Phimh)/(sx^2 + EPS2) + (EPS2/(sx^2 + EPS2))*(0.125*ddPhimh));
-        Fnl = sx + 2*zx + q*Fx;
-        dFnl = 1 + q*dFx + dq*Fx;
-    
+        Fcx = 2*(((Phiph - Phimh)*sx)/(sx^2 + EPS2) + 0.5*dPhimh*(EPS2/(sx^2 + EPS2)));
+        dFcx = 2*((0.5*dPhiph*sx - Phiph + Phimh)/(sx^2 + EPS2) + (EPS2/(sx^2 + EPS2))*(0.125*ddPhimh));
+        Fnl = sx + 2*zx + q*Fcx;
+        dFnl = 1 + q*dFcx + dq*Fcx;
         sxnew = sx - Fnl/dFnl;
         diff = abs(sxnew - sx);
         sx = sxnew;
@@ -135,7 +134,7 @@ for n=1:Ns
     end  
     rhox = (sx/(2*dt))*h;
     s(1) = sx;
-   
+    
     %update the y component
     v = sx/(2*dt);
     if v < -1/eta
@@ -144,9 +143,9 @@ for n=1:Ns
         h = eta;
     end
     rhoy = (sx/(2*dt))*h;
-    qy =  C*(1 + rhoy);
+    Fcy = Fr*(1 + rhoy);
     zy = z(2);
-    p = -q*Fr;
+    p = -C*Fcy;
     if zy < -0.5*p*thetd
         sy = -p*thetd - 2*zy;
         thet = thetd;
@@ -162,7 +161,7 @@ for n=1:Ns
     %update state variables 
     up = s + um;
 
-    %record
+    %record some outputs
     outp.x(n) = u(1);
     outp.y(n) = u(2);
     outp.Fr(n) = Fr;
@@ -175,12 +174,10 @@ for n=1:Ns
     outp.vy(n) = sy/(2*dt);
     outp.Qc(n) = -( ((sx/(2*dt))^2)*h + (sy/(2*dt))*(1 + rhoy)*thet )*Fr;
     outp.H(n) = 0.5*m*(up - u)'*(up - u)/dt^2 + 0.5*khat*(up + u)'*(up + u)/4 + Phiph;
-
+    
     %memorise
     um = u;
     u = up;
-    hm = h;
 end
-
 
 

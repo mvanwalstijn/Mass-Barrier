@@ -62,19 +62,19 @@ outp.x = zeros(1,Ns);
 outp.y = zeros(1,Ns);
 outp.Fc = zeros(1,Ns);
 outp.Fr = zeros(1,Ns);
-outp.qy = zeros(1,Ns);
 outp.h = zeros(1,Ns);
 outp.vx = zeros(1,Ns);
 outp.vy = zeros(1,Ns);
 outp.Qc = zeros(1,Ns);
 outp.H = zeros(1,Ns);
 outp.Ff = zeros(1,Ns);
+outp.psi = zeros(1,Ns);
 
 %% SOLUTION CONSTANTS %%%%%%%%%%%%
 EPSIL = eps;
+eta = 1;
 
 %% TIME-STEPPING LOOP %%%%%%%%%%%%%
-eta = 1;
 for n=1:Ns
     %required variables
     fe = [inp.x(n); inp.y(n)];
@@ -89,12 +89,12 @@ for n=1:Ns
        eta = ((0.2*alp + 1.3)*(1-cr))/((cr + chi*dt^2)*(vi + chi*dt^2));  % adjusted Sun et al expression
     end
     if vh < -1/eta
-        h = -1/vh;
+        hx = -1/vh;
     else
-        h = eta;
+        hx = eta;
     end
-    gam = (0.5/dt)*h;
-    lam = zx - 0.5*gam*C*psimh^2;    
+    gam = (0.5/dt)*hx*psimh;
+    lam = zx - gam*C*psimh;    
     
     %calculate allowable g \in [0, gn]
     gp = 2*(sqrt(lam^2 + C*psimh^2) - lam)/(sqrt(EPSIL*C*lam^2 + (C*psimh)^2));
@@ -108,21 +108,23 @@ for n=1:Ns
     end
 
     %calculate sx
-    a = 0.25*C*gam*g^2;
-    b = 1 + C*gam*psimh*g + 0.25*C*g^2;
-    c = C*psimh*g + 2*zx;
-    D = b^2 - 4*a*c;
-    sx = -2*c/(b + sqrt(D));
+    sx = -(2*zx + C*psimh*g)/(1 + C*gam*g + 0.25*C*g^2);
     
-    %update the auxiliary variable, the restoring force, and qx;
-    psiph = psimh + 0.5*g*sx;           
-    Fr = -0.5*(psiph+psimh)*g; 
-    rhoy = ((w - wm)/dt)*h;
-    qy =  C*(1 + rhoy);
+    %update the auxiliary variable, the restoring forcex;
+    psiph = psimh + 0.5*g*sx;   
+    %psiph = max(0,psiph);        % if needed, mitigate finite-precision round-off    
+    Fr = -0.5*(psiph+psimh)*g;  % contact force    
        
     %update the y component
     zy = z(2);
-    p = -qy*Fr;
+    vx = sx/(2*dt);
+    if vx < -1/eta
+        hy = -1/vx;
+    else
+        hy = eta;
+    end   
+    Fcy = Fr*(1 + vx*hy);
+    p = -C*Fcy;
     if zy < -0.5*p*thetd
         sy = -p*thetd - 2*zy;
         thet = thetd;
@@ -133,6 +135,7 @@ for n=1:Ns
         sy = 0;
         thet = -2*z(2)/p;
     end
+    vy = sy/(2*dt);
 
     %update state variables 
     s(1) = sx;      
@@ -142,15 +145,14 @@ for n=1:Ns
     %record
     outp.x(n) = u(1);
     outp.y(n) = u(2);
-    outp.Fc(n) = (1 + (0.5*sx/dt)*h)*Fr;
-    outp.rhox(n) = gam*sx;
-    outp.Ff(n) = thet*(1 + rhoy)*Fr;
-    outp.Fr(n) = Fr;
-    outp.qy(n) = qy;
-    outp.h(n) = h;
-    outp.vx(n) = sx/(2*dt);
-    outp.vy(n) = sy/(2*dt);
-    outp.Qc(n) = -( ((sx/(2*dt))^2)*h + (sy/(2*dt))*(1 + rhoy)*thet )*Fr;
+    outp.Fc(n) = Fcy;
+    outp.Ff(n) = thet*Fcy;
+    outp.Fr(n) = Fr;   
+    outp.h(n) = hx;
+    outp.psi(n) = psiph;
+    outp.vx(n) = vx;
+    outp.vy(n) = vy;
+    outp.Qc(n) = vx*((psiph-psimh)/dt)*hx*psimh + ((psiph+psimh)/2)*g*(1 + vx*hy)*vy*thet;
     outp.H(n) = 0.5*m*(up - u)'*(up - u)/dt^2 + 0.5*khat*(up + u)'*(up + u)/4 + 0.5*psiph^2;
 
     %memorise
